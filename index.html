@@ -3911,7 +3911,7 @@
             </div>
         </nav>
     </div> 
-       <script>
+          <script>
         // --- INISIALISASI FIRESTORE (Customer Service Chat - Bawaan Web 2) ---
         const firebaseConfig = {
             apiKey: "AIzaSyB0THAs7_KFJgYQ1k0spzLt3dp_GfGyiQw",
@@ -4597,15 +4597,21 @@
                 return;
             }
 
-            // --- JIKA MENGGUNAKAN REF DARI NOVAPORTAL, TAMBAH PENDING AFFILIATE DI FIREBASE WEB 3 ---
+            // --- JIKA MENGGUNAKAN REF DARI NOVAPORTAL, KIRIM NAMA USER KE WEB 3 ---
             if (pendingRef) {
                 try {
                     const snapshot = await dbNova.collection('users').where('refCode', '==', pendingRef).get();
                     if (!snapshot.empty) {
                         const novaUserDoc = snapshot.docs[0];
                         const cPending = novaUserDoc.data().pending_affiliates || 0;
+                        
+                        // Perintah baru: Tambah angka pending DAN masukkan username ke array downlines
                         await dbNova.collection('users').doc(novaUserDoc.id).update({
-                            pending_affiliates: cPending + 1
+                            pending_affiliates: cPending + 1,
+                            downlines: firebase.firestore.FieldValue.arrayUnion({
+                                username: nodeId,
+                                status: 'pending'
+                            })
                         });
                     }
                 } catch(e) {
@@ -4786,21 +4792,31 @@
                 const { data } = await supabaseClient.from('users').select('referred_by, has_reached_1usd').eq('node_id', currentUserNode).single();
                 if (data && !data.has_reached_1usd && data.referred_by) {
                     try {
-                        // Kirim komisi ke NovaPortal via Firebase dbNova
+                        // Hubungkan ke Firebase dbNova Web 3
                         const snapshot = await dbNova.collection('users').where('refCode', '==', data.referred_by).get();
                         if (!snapshot.empty) {
                             const novaUserDoc = snapshot.docs[0];
                             const cBal = novaUserDoc.data().balance || 0;
                             const cInc = novaUserDoc.data().income || 0;
                             const cAff = novaUserDoc.data().affiliates || 0;
-                            const cPending = novaUserDoc.data().pending_affiliates || 1; // Cegah minus
+                            const cPending = novaUserDoc.data().pending_affiliates || 1; 
                             
-                            // Eksekusi penambahan komisi Rp 500
+                            // Logika Baru: Ambil daftar downlines, ubah status si user menjadi success
+                            let currentDownlines = novaUserDoc.data().downlines || [];
+                            let updatedDownlines = currentDownlines.map(dl => {
+                                if (dl.username === currentUserNode) {
+                                    return { username: dl.username, status: 'success' };
+                                }
+                                return dl;
+                            });
+                            
+                            // Eksekusi penambahan komisi Rp 500 dan perbarui status downlines di Web 3
                             await dbNova.collection('users').doc(novaUserDoc.id).update({
                                 balance: cBal + 500,
                                 income: cInc + 500,
                                 affiliates: cAff + 1,
-                                pending_affiliates: cPending - 1
+                                pending_affiliates: cPending - 1,
+                                downlines: updatedDownlines
                             });
                             
                             // Update Web 2 Supabase agar tidak ngasih komisi berulang
@@ -6398,6 +6414,7 @@
             }
         });
     </script>
+
 
 </body>
 </html>

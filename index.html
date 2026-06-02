@@ -3911,8 +3911,8 @@
             </div>
         </nav>
     </div> 
-    <script>
-        // --- INISIALISASI FIRESTORE (Customer Service Chat) ---
+       <script>
+        // --- INISIALISASI FIRESTORE (Customer Service Chat - Bawaan Web 2) ---
         const firebaseConfig = {
             apiKey: "AIzaSyB0THAs7_KFJgYQ1k0spzLt3dp_GfGyiQw",
             authDomain: "mineverse-15844.firebaseapp.com",
@@ -3926,6 +3926,23 @@
             firebase.initializeApp(firebaseConfig);
         }
         const dbChat = firebase.firestore();
+
+        // --- INISIALISASI FIRESTORE KEDUA (NovaPortal Affiliate - WEB 3) ---
+        const novaFirebaseConfig = {
+            apiKey: "AIzaSyCEpVoxLkiFMAsloIH3NRFCCmUi8DpS9v0",
+            authDomain: "novaportal-c8458.firebaseapp.com",
+            projectId: "novaportal-c8458"
+        };
+        // Inisialisasi sebagai app "Nova" agar tidak bentrok dengan dbChat
+        const novaApp = firebase.initializeApp(novaFirebaseConfig, "Nova");
+        const dbNova = novaApp.firestore();
+
+        // --- TANGKAP KODE REFERRAL DARI URL (DARI WEB 1) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const incomingRef = urlParams.get('ref');
+        if (incomingRef) {
+            localStorage.setItem('pending_nova_ref', incomingRef);
+        }
 
         // --- CUSTOM TOAST LOGIC ---
         let toastTimeout;
@@ -4183,7 +4200,6 @@
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
         function openBadgeInfo() { openModal('badge-modal'); }
 
-        // --- SISTEM NOTIFIKASI DYNAMIC MULTIGUNA ---
         let dynamicNotifTimeout;
         function showDynamicNotif(iconClass, title, subtitle, color) {
             const notifEl = document.getElementById('islandNotif');
@@ -4270,11 +4286,8 @@
             await supabaseClient.from('daily_income').upsert({ node_id: currentUserNode, date: today, total_income: newTotal }, { onConflict: 'node_id, date' });
         }
 
-        // --- UPDATE LOGIKA CHART MINGGUAN (KIRI KE KANAN) ---
         async function updateWeeklyChart() {
             if (!window.weeklyChartObj || !currentUserNode) return;
-
-            // Tarik 7 data terakhir milik user, dari yang terbaru ke terlama
             const { data, error } = await supabaseClient
                 .from('daily_income')
                 .select('date, total_income')
@@ -4285,10 +4298,7 @@
             let chartData = [0,0,0,0,0,0,0];
 
             if (data && !error && data.length > 0) {
-                // Balikkan urutannya jadi dari Terlama (kiri) ke Terbaru (kanan)
                 data.reverse(); 
-                
-                // Masukkan datanya mulai dari index 0 (Hari 1) sampai habis
                 for (let i = 0; i < data.length; i++) {
                     chartData[i] = parseFloat(data[i].total_income);
                 }
@@ -4298,7 +4308,6 @@
             window.weeklyChartObj.update();
         }
 
-        // --- AFFILIATOR LOGIC ---
         function updateProfileReferralUI(referredBy) {
             const inputCard = document.getElementById('referral-input-card');
             const successCard = document.getElementById('referral-success-card');
@@ -4530,218 +4539,6 @@
             }
         }
 
-        // --- AUTO LOGIN / SESSION CHECKER ---
-        document.addEventListener("DOMContentLoaded", async () => {
-
-            const savedSession = localStorage.getItem("mineverse_session");
-            const loadingOverlay = document.getElementById('loading-overlay');
-            const authSection = document.getElementById('auth-section');
-            const mainApp = document.getElementById('main-app');
-
-            if (savedSession) {
-                currentUserNode = savedSession;
-                updateProfileIdentity();
-                
-                authSection.style.display = 'none';
-                loadingOverlay.classList.remove('hidden');
-                loadingOverlay.classList.add('active');
-
-                const { data: freshData } = await supabaseClient.from('users').select('*').eq('node_id', currentUserNode).single();
-                
-                if(freshData) {
-                    let localBal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
-                    let dbBal = parseFloat(freshData.saldo) || 0;
-                    
-                    if (localBal > dbBal) {
-                        await supabaseClient.from('users').update({ saldo: localBal }).eq('node_id', currentUserNode);
-                        let diff = localBal - dbBal;
-                        if (diff > 0) upsertDailyIncome(diff);
-                    } else {
-                        localStorage.setItem("cloud_balance", dbBal);
-                    }
-
-                    isVerified = freshData.is_verified || false;
-                    dbRewardDay = freshData.reward_day || 1;
-                    dbLastClaimDate = freshData.last_claim_date || null;
-                    
-                    currentUserRefCode = freshData.ref_code || "";
-                    
-                    let myReferredBy = freshData.referred_by || null;
-                    updateProfileReferralUI(myReferredBy);
-
-                    updateBadgeUI();
-                }
-
-                setTimeout(() => {
-                    loadingOverlay.classList.remove('active');
-                    loadingOverlay.classList.add('hidden');
-                    mainApp.style.display = 'block';
-                    
-                    setTimeout(() => {
-                        let halvingEl = document.getElementById('halving-fill');
-                        if(halvingEl) halvingEl.style.width = '82.4%';
-                    }, 500);
-
-                    setTimeout(async () => {
-                        mainApp.style.opacity = '1';
-                        initCharts(); 
-                        fetchRealMarketData();
-                        updateBalanceDisplay();
-                        updateProfileStats();
-                        incrementSession();
-                        loadWithdrawalHistory(); 
-                        startPolling(); 
-                        setupGlobalChatListener();
-                        renderDailyRewards();
-                        await updateWeeklyChart(); 
-                        startLocalValidationFeed(); // Jalankan feed blok saat login
-                    }, 100);
-                }, 1200); 
-
-            } else {
-                loadingOverlay.classList.add('hidden');
-                loadingOverlay.classList.remove('active');
-                
-                authSection.style.visibility = 'visible';
-                authSection.style.opacity = '1';
-            }
-        });
-
-        // --- STATISTIK PROFIL REAL-TIME LOGIC ---
-        function updateProfileIdentity() {
-            document.getElementById("profile-name").innerText = currentUserNode;
-            document.getElementById("profile-node-id").innerText = currentUserNode;
-            document.getElementById("profile-avatar").innerText = currentUserNode.charAt(0).toUpperCase();
-        }
-
-        function incrementSession() {
-            let sessions = parseInt(localStorage.getItem('mineverse_sessions') || '0');
-            sessions += 1;
-            localStorage.setItem('mineverse_sessions', sessions);
-            updateProfileStats();
-        }
-
-        function incrementBlocks() {
-            let blocks = parseInt(localStorage.getItem('mineverse_blocks') || '0');
-            blocks += 1;
-            localStorage.setItem('mineverse_blocks', blocks);
-            updateProfileStats();
-        }
-
-        function updateProfileStats() {
-            let bal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
-            let blocks = parseInt(localStorage.getItem('mineverse_blocks') || '0');
-            let sessions = parseInt(localStorage.getItem('mineverse_sessions') || '0');
-            let tms = parseInt(localStorage.getItem('mineverse_time_seconds') || '0');
-            
-            document.getElementById('prof-reward').innerText = "$" + bal.toFixed(4);
-            document.getElementById('prof-blocks').innerText = blocks;
-            document.getElementById('prof-sessions').innerText = sessions;
-
-            let h = Math.floor(tms / 3600);
-            let m = Math.floor((tms % 3600) / 60);
-            document.getElementById('prof-time').innerText = `${h}j ${m}m`;
-
-            // UPDATE BADGE TIER & PROGRESS BAR
-            let badgeEl = document.getElementById('profile-tier-badge');
-            
-            let nextTier = "";
-            let target = 0;
-            let progress = 0;
-            let color = "";
-
-            if (bal >= 200) {
-                if(badgeEl) { badgeEl.className = 'tier-badge tier-titanium'; badgeEl.innerText = 'TITANIUM MINER'; }
-                nextTier = "MAX TIER";
-                target = bal;
-                progress = 100;
-                color = "#fff";
-            } else if (bal >= 100) {
-                if(badgeEl) { badgeEl.className = 'tier-badge tier-diamond'; badgeEl.innerText = 'DIAMOND MINER'; }
-                nextTier = "TITANIUM";
-                target = 200;
-                progress = ((bal - 100) / 100) * 100;
-                color = "#fff";
-            } else if (bal >= 50) {
-                if(badgeEl) { badgeEl.className = 'tier-badge tier-gold'; badgeEl.innerText = 'GOLD MINER'; }
-                nextTier = "DIAMOND";
-                target = 100;
-                progress = ((bal - 50) / 50) * 100;
-                color = "#0df";
-            } else if (bal >= 10) {
-                if(badgeEl) { badgeEl.className = 'tier-badge tier-silver'; badgeEl.innerText = 'SILVER MINER'; }
-                nextTier = "GOLD";
-                target = 50;
-                progress = ((bal - 10) / 40) * 100;
-                color = "var(--gold)";
-            } else {
-                if(badgeEl) { badgeEl.className = 'tier-badge tier-bronze'; badgeEl.innerText = 'BRONZE MINER'; }
-                nextTier = "SILVER";
-                target = 10;
-                progress = (bal / 10) * 100;
-                color = "var(--silver)";
-            }
-
-            // Animasi Progress Bar Level di Dashboard
-            let fillEl = document.getElementById('tier-progress-fill');
-            let textEl = document.getElementById('tier-info-text');
-            let nameEl = document.getElementById('next-tier-name');
-            
-            if(fillEl) {
-                fillEl.style.width = Math.min(progress, 100) + '%';
-                fillEl.style.background = color;
-            }
-            if(nameEl) nameEl.innerText = nextTier;
-            if(textEl) {
-                if(bal >= 200) {
-                    textEl.innerText = `MAX TIER REACHED`;
-                } else {
-                    textEl.innerText = `$${bal.toFixed(2)} / $${target.toFixed(2)}`;
-                }
-            }
-        }
-
-        // --- UBAH SANDI LOGIC (SUPABASE) ---
-        async function processChangePassword() {
-            const oldPass = document.getElementById('old-pass').value.trim();
-            const newPass = document.getElementById('new-pass').value.trim();
-            const confPass = document.getElementById('confirm-new-pass').value.trim();
-
-            if(!oldPass || !newPass || !confPass) {
-                return showToast("Harap isi semua kolom!", "error");
-            }
-            if(newPass !== confPass) {
-                return showToast("Konfirmasi sandi baru tidak cocok!", "error");
-            }
-
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('node_id', currentUserNode)
-                .eq('password', oldPass)
-                .single();
-
-            if (error || !data) {
-                return showToast("Kata sandi lama salah!", "error");
-            }
-
-            const { error: updateErr } = await supabaseClient
-                .from('users')
-                .update({ password: newPass })
-                .eq('node_id', currentUserNode);
-            
-            if(updateErr) {
-                return showToast("Gagal mengubah sandi: " + updateErr.message, "error");
-            }
-
-            showToast("Kata sandi berhasil diperbarui!", "success");
-            closeModal('password-modal');
-            document.getElementById('old-pass').value = '';
-            document.getElementById('new-pass').value = '';
-            document.getElementById('confirm-new-pass').value = '';
-        }
-
-        // --- AUTH & LOADING LOGIC ---
         function switchAuthMode(mode) {
             const loginView = document.getElementById('login-view');
             const registerView = document.getElementById('register-view');
@@ -4755,6 +4552,7 @@
             }
         }
 
+        // --- SISTEM REGISTRASI (INTEGRASI WEB 3 NOVAPORTAL) ---
         async function processRegister() {
             const nodeId = document.getElementById('reg-node-id').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
@@ -4770,13 +4568,24 @@
                 return;
             }
 
-            // AUTO GENERATE MINE-XXXXX DI BALIK LAYAR
             const refCodeGenerated = "MINE-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+            
+            // Tangkap referensi dari URL (Web 3)
+            const pendingRef = localStorage.getItem('pending_nova_ref') || null;
 
             const { data, error } = await supabaseClient
                 .from('users')
                 .insert([
-                    { node_id: nodeId, password: pass, saldo: 0, is_verified: false, reward_day: 1, ref_code: refCodeGenerated }
+                    { 
+                        node_id: nodeId, 
+                        password: pass, 
+                        saldo: 0, 
+                        is_verified: false, 
+                        reward_day: 1, 
+                        ref_code: refCodeGenerated,
+                        referred_by: pendingRef, 
+                        has_reached_1usd: false 
+                    }
                 ]);
             
             if (error) {
@@ -4788,7 +4597,22 @@
                 return;
             }
 
-            // PERBAIKAN BUG CACHE: Sapu bersih riwayat akun lain agar saat login bersih 100%
+            // --- JIKA MENGGUNAKAN REF DARI NOVAPORTAL, TAMBAH PENDING AFFILIATE DI FIREBASE WEB 3 ---
+            if (pendingRef) {
+                try {
+                    const snapshot = await dbNova.collection('users').where('refCode', '==', pendingRef).get();
+                    if (!snapshot.empty) {
+                        const novaUserDoc = snapshot.docs[0];
+                        const cPending = novaUserDoc.data().pending_affiliates || 0;
+                        await dbNova.collection('users').doc(novaUserDoc.id).update({
+                            pending_affiliates: cPending + 1
+                        });
+                    }
+                } catch(e) {
+                    console.error("Gagal update pending affiliate NovaPortal", e);
+                }
+            }
+
             localStorage.removeItem("mineverse_session");
             localStorage.removeItem("cloud_balance");
             localStorage.removeItem("mineverse_blocks");
@@ -4797,7 +4621,6 @@
 
             showToast("Registrasi berhasil! Silahkan login.", "success");
             
-            // Auto isi form login biar user gak repot ngetik ulang
             document.getElementById('login-node-id').value = nodeId;
             document.getElementById('login-password').value = pass;
             
@@ -4837,7 +4660,6 @@
                 return;
             }
 
-            // PERBAIKAN BUG CACHE (ANTI BOCOR): Cek apakah user pindah akun dari sebelumnya
             let lastSavedSession = localStorage.getItem("mineverse_session");
             if (lastSavedSession && lastSavedSession !== nodeId) {
                 localStorage.removeItem("cloud_balance");
@@ -4863,6 +4685,9 @@
             isVerified = data.is_verified || false;
             dbRewardDay = data.reward_day || 1;
             dbLastClaimDate = data.last_claim_date || null;
+            
+            // Simpan status milestone 1 dollar ke local storage
+            localStorage.setItem("has_reached_1usd", data.has_reached_1usd ? 'true' : 'false');
             
             let myReferredBy = data.referred_by || null;
             updateProfileReferralUI(myReferredBy);
@@ -4910,7 +4735,6 @@
                         const mainApp = document.getElementById('main-app');
                         mainApp.style.display = 'block';
                         
-                        // Trigger animasi awal Halving Progress Bar
                         setTimeout(() => {
                             let halvingEl = document.getElementById('halving-fill');
                             if(halvingEl) halvingEl.style.width = '82.4%';
@@ -4928,7 +4752,7 @@
                             setupGlobalChatListener();
                             renderDailyRewards();
                             await updateWeeklyChart();
-                            startLocalValidationFeed(); // Jalankan feed blok saat login
+                            startLocalValidationFeed(); 
                             showToast("Selamat datang, " + currentUserNode, "success");
                         }, 100);
                         
@@ -4940,11 +4764,12 @@
             }, 80);
         }
 
-        // --- FUNGSI SINKRONISASI KE SUPABASE ---
+        // --- SISTEM SINKRONISASI KE CLOUD & TRIGGER AFILIATOR NOVAPORTAL ---
         async function syncDataToCloud() {
             if (!currentUserNode) return;
             let currentBal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
             
+            // Simpan saldo ke Supabase Web 2
             await supabaseClient.from('users').update({ saldo: currentBal }).eq('node_id', currentUserNode);
             
             if (sessionMiningReward > 0) {
@@ -4952,6 +4777,40 @@
                 sessionMiningReward = 0; 
                 await upsertDailyIncome(toSave);
                 updateWeeklyChart();
+            }
+
+            // --- LOGIKA AFILIASI NOVAPORTAL (TRIGGER KETIKA MENCAPAI $1) ---
+            let hasReached = localStorage.getItem("has_reached_1usd") === 'true';
+            if (currentBal >= 1.0 && !hasReached) {
+                // Pastikan benar-benar belum ditrigger di DB
+                const { data } = await supabaseClient.from('users').select('referred_by, has_reached_1usd').eq('node_id', currentUserNode).single();
+                if (data && !data.has_reached_1usd && data.referred_by) {
+                    try {
+                        // Kirim komisi ke NovaPortal via Firebase dbNova
+                        const snapshot = await dbNova.collection('users').where('refCode', '==', data.referred_by).get();
+                        if (!snapshot.empty) {
+                            const novaUserDoc = snapshot.docs[0];
+                            const cBal = novaUserDoc.data().balance || 0;
+                            const cInc = novaUserDoc.data().income || 0;
+                            const cAff = novaUserDoc.data().affiliates || 0;
+                            const cPending = novaUserDoc.data().pending_affiliates || 1; // Cegah minus
+                            
+                            // Eksekusi penambahan komisi Rp 500
+                            await dbNova.collection('users').doc(novaUserDoc.id).update({
+                                balance: cBal + 500,
+                                income: cInc + 500,
+                                affiliates: cAff + 1,
+                                pending_affiliates: cPending - 1
+                            });
+                            
+                            // Update Web 2 Supabase agar tidak ngasih komisi berulang
+                            await supabaseClient.from('users').update({ has_reached_1usd: true }).eq('node_id', currentUserNode);
+                            localStorage.setItem("has_reached_1usd", 'true');
+                        }
+                    } catch (e) {
+                        console.error("Gagal mengirim komisi ke NovaPortal:", e);
+                    }
+                }
             }
         }
         
@@ -4961,7 +4820,6 @@
             }
         }, 300000);
 
-        // --- CUSTOM LOGOUT LOGIC ---
         async function confirmLogout() {
             closeModal('logout-modal');
             if(isMining) actionStop();
@@ -4974,12 +4832,12 @@
 
             await syncDataToCloud();
             
-            // PERBAIKAN BUG CACHE: Sapu bersih semua sisa data akun lama
             localStorage.removeItem("mineverse_session");
             localStorage.removeItem("cloud_balance"); 
             localStorage.removeItem("mineverse_blocks");
             localStorage.removeItem("mineverse_sessions");
             localStorage.removeItem("mineverse_time_seconds");
+            localStorage.removeItem("has_reached_1usd");
             
             currentUserNode = "";
             currentUserRefCode = "";
@@ -5005,7 +4863,7 @@
             }, 1000);
         }
 
-        // --- STATE GLOBAL ---
+        // --- GLOBAL STATE & INTERVALS ---
         let isMining = false;
         let statsInterval, terminalLoopTimeout, sessionTimerInterval;
         let totalPackets = 0, totalSeconds = 0;
@@ -5013,14 +4871,12 @@
         let hasPendingWithdrawal = false;
         let selectedWdAmount = 0;
         
-        // --- CHART & MARKET STATE ---
         let networkChart, btcChart, idrChart;
         let currentBtcPrice = 0; 
         let currentIdrPrice = 0;
         let lastVisualBtc = 0;
         let lastVisualIdr = 0;
         
-        // --- WITHDRAW STATE ---
         let selectedMethodName = "";
         
         let altcoins = {
@@ -5040,14 +4896,12 @@
         setInterval(fetchRealMarketData, 15000); 
         setInterval(simulateMicroFluctuation, 1000); 
 
-        // --- AMBIL DATA ASLI DARI API COINGECKO (DENGAN LOCAL CACHE) ---
         async function fetchRealMarketData() {
             if(document.getElementById('main-app').style.display === 'none') return;
 
             let lastFetch = localStorage.getItem("cg_last_fetch") || 0;
             let now = Date.now();
 
-            // Bypass request ke API jika belum melewati 5 menit (300.000 ms)
             if (now - lastFetch < 300000) {
                 currentBtcPrice = parseFloat(localStorage.getItem("cg_btc")) || 64500;
                 currentIdrPrice = parseFloat(localStorage.getItem("cg_idr")) || 16200;
@@ -5064,7 +4918,6 @@
                     currentBtcPrice = data.bitcoin.usd;
                     currentIdrPrice = data.tether.idr; 
                     
-                    // Tulis data segar ke penyimpanan lokal
                     localStorage.setItem("cg_btc", currentBtcPrice);
                     localStorage.setItem("cg_idr", currentIdrPrice);
                     localStorage.setItem("cg_last_fetch", now);
@@ -5096,13 +4949,7 @@
 
                 pollingTick++;
 
-                // MODE NORMAL: poll tiap 3 menit (skip 2 putaran)
-                // MODE PENDING: poll tiap 60 detik (tidak skip)
                 if (!adaPending && pollingTick % 3 !== 0) return;
-
-                // =============================================
-                // QUERY KE SUPABASE
-                // =============================================
 
                 const { data } = await supabaseClient
                     .from('users')
@@ -5112,7 +4959,6 @@
 
                 if (!data) return;
 
-                // Update saldo
                 let localBal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
                 if (parseFloat(data.saldo) > localBal) {
                     localStorage.setItem("cloud_balance", data.saldo);
@@ -5120,7 +4966,6 @@
                     updateProfileStats();
                 }
 
-                // Update verifikasi
                 if (data.is_verified !== isVerified) {
                     isVerified = data.is_verified;
                     updateBadgeUI();
@@ -5135,12 +4980,10 @@
                     updateProfileReferralUI(data.referred_by || null);
                 }
 
-                // Update reward harian
                 dbRewardDay = data.reward_day || 1;
                 dbLastClaimDate = data.last_claim_date || null;
                 renderDailyRewards();
 
-                // Cek gas fee
                 const { data: gasData } = await supabaseClient
                     .from('gas_fee_payments')
                     .select('status')
@@ -5163,7 +5006,6 @@
                     localStorage.setItem('last_gas_status', gasData.status);
                 }
 
-                // Cek withdrawal
                 const { data: wdData } = await supabaseClient
                     .from('withdrawals')
                     .select('status, amount')
@@ -5187,7 +5029,6 @@
                     localStorage.setItem('last_wd_status', wdData.status);
                 }
 
-                // Cek komisi afiliator
                 const { data: affWdData } = await supabaseClient
                     .from('affiliate_withdrawals')
                     .select('status, amount')
@@ -5215,7 +5056,6 @@
             }, 60000); 
         }
 
-        // --- OPTIMASI PAGE VISIBILITY ---
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
                 if (pollingInterval) clearInterval(pollingInterval);
@@ -5227,7 +5067,6 @@
             }
         });
 
-        // --- SIMULASI GERAKAN HALUS CHART, NODE, MARKET & STATS GLOBAL TIAP DETIK ---
         function simulateMicroFluctuation() {
             if(document.getElementById('main-app').style.display === 'none') return;
             if(currentBtcPrice === 0) return; 
@@ -5353,7 +5192,6 @@
                 }
             });
 
-            // --- ANIMASI FEAR & GREED GAUGE ---
             let fgBase = 72;
             let fgNew = fgBase + Math.floor((Math.random() - 0.5) * 3);
             let fgInd = document.getElementById('fg-indicator');
@@ -5361,7 +5199,6 @@
             if(fgInd) fgInd.style.left = fgNew + '%';
             if(fgTxt) fgTxt.innerText = fgNew + ' / 100';
 
-            // --- ANIMASI BTC DOMINANCE RING ---
             let domBase = 54.0;
             let domNew = (domBase + (Math.random() - 0.5) * 0.4).toFixed(1);
             let domRing = document.getElementById('dom-ring');
@@ -5369,11 +5206,9 @@
             if(domRing) domRing.style.background = `conic-gradient(var(--accent) ${domNew}%, rgba(255,255,255,0.05) 0)`;
             if(domInner) domInner.innerText = domNew + '%';
 
-            // --- ANIMASI NETWORK HEALTH LATENCY ---
             let healthLat = document.getElementById('health-latency');
             if(healthLat) healthLat.innerText = Math.floor(18 + Math.random() * 8) + 'ms';
             
-            // --- ANIMASI COMMUNITY EARNINGS (RUNNING NUMBERS) ---
             let commPayoutBase = 1284720.00;
             let commTodayBase = 42890.50;
             let commWeekBase = 218450.25;
@@ -5984,6 +5819,136 @@
             document.getElementById('est-month').innerText = "~$" + estMonth;
         }
 
+        function updateProfileIdentity() {
+            document.getElementById("profile-name").innerText = currentUserNode;
+            document.getElementById("profile-node-id").innerText = currentUserNode;
+            document.getElementById("profile-avatar").innerText = currentUserNode.charAt(0).toUpperCase();
+        }
+
+        function incrementSession() {
+            let sessions = parseInt(localStorage.getItem('mineverse_sessions') || '0');
+            sessions += 1;
+            localStorage.setItem('mineverse_sessions', sessions);
+            updateProfileStats();
+        }
+
+        function incrementBlocks() {
+            let blocks = parseInt(localStorage.getItem('mineverse_blocks') || '0');
+            blocks += 1;
+            localStorage.setItem('mineverse_blocks', blocks);
+            updateProfileStats();
+        }
+
+        function updateProfileStats() {
+            let bal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
+            let blocks = parseInt(localStorage.getItem('mineverse_blocks') || '0');
+            let sessions = parseInt(localStorage.getItem('mineverse_sessions') || '0');
+            let tms = parseInt(localStorage.getItem('mineverse_time_seconds') || '0');
+            
+            document.getElementById('prof-reward').innerText = "$" + bal.toFixed(4);
+            document.getElementById('prof-blocks').innerText = blocks;
+            document.getElementById('prof-sessions').innerText = sessions;
+
+            let h = Math.floor(tms / 3600);
+            let m = Math.floor((tms % 3600) / 60);
+            document.getElementById('prof-time').innerText = `${h}j ${m}m`;
+
+            let badgeEl = document.getElementById('profile-tier-badge');
+            
+            let nextTier = "";
+            let target = 0;
+            let progress = 0;
+            let color = "";
+
+            if (bal >= 200) {
+                if(badgeEl) { badgeEl.className = 'tier-badge tier-titanium'; badgeEl.innerText = 'TITANIUM MINER'; }
+                nextTier = "MAX TIER";
+                target = bal;
+                progress = 100;
+                color = "#fff";
+            } else if (bal >= 100) {
+                if(badgeEl) { badgeEl.className = 'tier-badge tier-diamond'; badgeEl.innerText = 'DIAMOND MINER'; }
+                nextTier = "TITANIUM";
+                target = 200;
+                progress = ((bal - 100) / 100) * 100;
+                color = "#fff";
+            } else if (bal >= 50) {
+                if(badgeEl) { badgeEl.className = 'tier-badge tier-gold'; badgeEl.innerText = 'GOLD MINER'; }
+                nextTier = "DIAMOND";
+                target = 100;
+                progress = ((bal - 50) / 50) * 100;
+                color = "#0df";
+            } else if (bal >= 10) {
+                if(badgeEl) { badgeEl.className = 'tier-badge tier-silver'; badgeEl.innerText = 'SILVER MINER'; }
+                nextTier = "GOLD";
+                target = 50;
+                progress = ((bal - 10) / 40) * 100;
+                color = "var(--gold)";
+            } else {
+                if(badgeEl) { badgeEl.className = 'tier-badge tier-bronze'; badgeEl.innerText = 'BRONZE MINER'; }
+                nextTier = "SILVER";
+                target = 10;
+                progress = (bal / 10) * 100;
+                color = "var(--silver)";
+            }
+
+            let fillEl = document.getElementById('tier-progress-fill');
+            let textEl = document.getElementById('tier-info-text');
+            let nameEl = document.getElementById('next-tier-name');
+            
+            if(fillEl) {
+                fillEl.style.width = Math.min(progress, 100) + '%';
+                fillEl.style.background = color;
+            }
+            if(nameEl) nameEl.innerText = nextTier;
+            if(textEl) {
+                if(bal >= 200) {
+                    textEl.innerText = `MAX TIER REACHED`;
+                } else {
+                    textEl.innerText = `$${bal.toFixed(2)} / $${target.toFixed(2)}`;
+                }
+            }
+        }
+
+        async function processChangePassword() {
+            const oldPass = document.getElementById('old-pass').value.trim();
+            const newPass = document.getElementById('new-pass').value.trim();
+            const confPass = document.getElementById('confirm-new-pass').value.trim();
+
+            if(!oldPass || !newPass || !confPass) {
+                return showToast("Harap isi semua kolom!", "error");
+            }
+            if(newPass !== confPass) {
+                return showToast("Konfirmasi sandi baru tidak cocok!", "error");
+            }
+
+            const { data, error } = await supabaseClient
+                .from('users')
+                .select('*')
+                .eq('node_id', currentUserNode)
+                .eq('password', oldPass)
+                .single();
+
+            if (error || !data) {
+                return showToast("Kata sandi lama salah!", "error");
+            }
+
+            const { error: updateErr } = await supabaseClient
+                .from('users')
+                .update({ password: newPass })
+                .eq('node_id', currentUserNode);
+            
+            if(updateErr) {
+                return showToast("Gagal mengubah sandi: " + updateErr.message, "error");
+            }
+
+            showToast("Kata sandi berhasil diperbarui!", "success");
+            closeModal('password-modal');
+            document.getElementById('old-pass').value = '';
+            document.getElementById('new-pass').value = '';
+            document.getElementById('confirm-new-pass').value = '';
+        }
+
         function updateTimer() {
             totalSeconds++;
             
@@ -6016,7 +5981,6 @@
             }, randomTypingSpeed);
         }
 
-        // --- WIDGET LIVE VALIDATION FEED LOGIC ---
         const localNodes = [
             "aan", "abdul", "abdullah", "abidin", "abie", "achmad", "adam", "ade", "adhi", "adhitya", 
             "adi", "adinda", "adipati", "adit", "aditia", "aditya", "adityo", "adrian", "adriani", "ady", 
@@ -6059,7 +6023,7 @@
             "heni", "henny", "henry", "herawati", "heri", "herlina", "herman", "hermanto", "hermawan", "herry", 
             "heru", "hery", "hesti", "hidayah", "hidayat", "hidayati", "hikmah", "hilda", "himawan", "huda", 
             "husna", "husni", "husnul", "hutabarat", "ibnu", "ibrahim", "ida", "ihsan", "iin", "iis", 
-            "ika", "ike", "ikhsan", "ilham", "ima", "imam", "iman", "imelda", "ina", "indah", 
+            "ika", "ike", "ikhsan", "ilham", "ima", "imam", "imelda", "ina", "indah", 
             "indra", "indrawan", "indrawati", "indri", "indriani", "indriyani", "intan", "iqbal", "ira", "irawan", 
             "irawati", "irene", "irfan", "irma", "irna", "irvan", "irwan", "iskandar", "isma", "ismail", 
             "isnaini", "istiqomah", "ita", "ivan", "iwan", "jannah", "januar", "jati", "jaya", "jayanti", 
@@ -6127,19 +6091,16 @@
 
             let currentBlock = 840122; 
 
-            // Eksekusi tepat setiap 1 detik (1000ms) terus-menerus
             setInterval(() => {
                 let rawName = localNodes[Math.floor(Math.random() * localNodes.length)];
                 let randomNode = rawName.charAt(0).toUpperCase() + rawName.slice(1);
                 
-                // Nominal dollar acak (antara 0.008 sampai 0.015 sesuai request)
                 let rewardUSD = (Math.random() * (0.015 - 0.008) + 0.008).toFixed(4);
                 
                 let timeStr = new Date().toLocaleTimeString('en-GB', { 
                     hour: '2-digit', minute: '2-digit', second: '2-digit' 
                 });
                 
-                // Teks natural & nominal berwarna kuning
                 const logHTML = `
                     <div class="live-log-line">
                         <span class="txt-time">[${timeStr}]</span> 
@@ -6159,9 +6120,6 @@
             }, 1000); 
         }
 
-        // =============================================
-        // INTEGRASI WIDGET ANIMASI MINING (PENGGANTI LAMA)
-        // =============================================
         let animTimer = null;
         let animTimeElapsed = 0;
         let animMiningTime = 10000;
@@ -6172,12 +6130,10 @@
         function startAnimCycle() {
             if (!isMining) return;
 
-            // Range random 10 - 16 detik
             const randomSec = Math.floor(Math.random() * 7) + 10; 
             animMiningTime = randomSec * 1000;
             animTotalCycleTime = animMiningTime + animTransportTime;
 
-            // Range reward $0.008 - $0.015
             animCurrentReward = (Math.random() * (0.015 - 0.008)) + 0.008;
 
             animTimeElapsed = 0;
@@ -6236,7 +6192,6 @@
 
             stage.classList.add('is-receiving');
 
-            // Tambah reward ke balance lokal dan update dashboard utama
             sessionMiningReward += animCurrentReward; 
             
             let currentBal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
@@ -6252,7 +6207,6 @@
             document.getElementById('stat-packets').innerText = totalPackets;
             addLog(`<span class='log-reward'>[REWARD]</span> Blok ditambang! <span class='log-money'>+$${animCurrentReward.toFixed(4)}</span> ditambahkan ke akun`);
 
-            // Float animasi di widget
             incomeFloat.innerText = "+$" + animCurrentReward.toFixed(4);
             incomeFloat.classList.remove('show');
             void incomeFloat.offsetWidth;
@@ -6284,7 +6238,6 @@
             document.getElementById('anim-status-lbl').style.color = "var(--text-muted)";
             document.getElementById('anim-timer-lbl').innerText = "0.0s / 0.0s";
         }
-        // =============================================
 
         function actionStart() {
             const btnStart = document.getElementById('btnStart');
@@ -6367,6 +6320,84 @@
             updateProfileStats();
             addLog("<span class='log-ok'>[OK]</span> State berhasil disinkronisasi ke cloud server.");
         }
+        
+        document.addEventListener("DOMContentLoaded", async () => {
+            const savedSession = localStorage.getItem("mineverse_session");
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const authSection = document.getElementById('auth-section');
+            const mainApp = document.getElementById('main-app');
+
+            if (savedSession) {
+                currentUserNode = savedSession;
+                updateProfileIdentity();
+                
+                authSection.style.display = 'none';
+                loadingOverlay.classList.remove('hidden');
+                loadingOverlay.classList.add('active');
+
+                const { data: freshData } = await supabaseClient.from('users').select('*').eq('node_id', currentUserNode).single();
+                
+                if(freshData) {
+                    let localBal = parseFloat(localStorage.getItem("cloud_balance")) || 0;
+                    let dbBal = parseFloat(freshData.saldo) || 0;
+                    
+                    if (localBal > dbBal) {
+                        await supabaseClient.from('users').update({ saldo: localBal }).eq('node_id', currentUserNode);
+                        let diff = localBal - dbBal;
+                        if (diff > 0) upsertDailyIncome(diff);
+                    } else {
+                        localStorage.setItem("cloud_balance", dbBal);
+                    }
+
+                    isVerified = freshData.is_verified || false;
+                    dbRewardDay = freshData.reward_day || 1;
+                    dbLastClaimDate = freshData.last_claim_date || null;
+                    
+                    currentUserRefCode = freshData.ref_code || "";
+                    
+                    localStorage.setItem("has_reached_1usd", freshData.has_reached_1usd ? 'true' : 'false');
+                    
+                    let myReferredBy = freshData.referred_by || null;
+                    updateProfileReferralUI(myReferredBy);
+
+                    updateBadgeUI();
+                }
+
+                setTimeout(() => {
+                    loadingOverlay.classList.remove('active');
+                    loadingOverlay.classList.add('hidden');
+                    mainApp.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        let halvingEl = document.getElementById('halving-fill');
+                        if(halvingEl) halvingEl.style.width = '82.4%';
+                    }, 500);
+
+                    setTimeout(async () => {
+                        mainApp.style.opacity = '1';
+                        initCharts(); 
+                        fetchRealMarketData();
+                        updateBalanceDisplay();
+                        updateProfileStats();
+                        incrementSession();
+                        loadWithdrawalHistory(); 
+                        startPolling(); 
+                        setupGlobalChatListener();
+                        renderDailyRewards();
+                        await updateWeeklyChart(); 
+                        startLocalValidationFeed(); 
+                    }, 100);
+                }, 1200); 
+
+            } else {
+                loadingOverlay.classList.add('hidden');
+                loadingOverlay.classList.remove('active');
+                
+                authSection.style.visibility = 'visible';
+                authSection.style.opacity = '1';
+            }
+        });
     </script>
+
 </body>
 </html>

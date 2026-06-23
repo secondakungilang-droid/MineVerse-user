@@ -2748,8 +2748,13 @@
                         <label class="form-label">Alamat Email (Gmail)</label>
                         <div class="input-glass-container"><i class='bx bx-envelope'></i><input type="email" id="verif-email" class="input-glass" placeholder="contoh@gmail.com" style="margin-bottom:0;"></div>
                     </div>
-                 <button class="btn-primary" id="btn-send-otp" onclick="sendOTP()">Konfirmasi</button>
-                </div>
+                <button class="btn-primary" id="btn-send-otp" onclick="sendOTP()">Kirim Kode OTP</button>
+
+                    <div id="otp-container" style="display: none; border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: 8px;">
+                        <label class="form-label">Kode OTP (6 Digit)</label>
+                        <div class="input-glass-container"><i class='bx bx-key'></i><input type="number" id="verif-otp" class="input-glass" placeholder="123456" style="margin-bottom:0;"></div>
+                        <button class="btn-primary" style="margin-top: 16px;" onclick="verifyOTP()">Konfirmasi OTP</button>
+                    </div>
             </div>
         </div>
     </div>
@@ -5348,21 +5353,35 @@ async function sendOTP() {
     showToast("Memeriksa kredensial...", "info");
     const { data, error } = await supabaseClient.from('users').select('password').eq('node_id', currentUserNode).single();
     if(error || data.password !== pass) return showToast("Kata sandi Node salah", "error");
-    showToast("Verifikasi berhasil!", "success");
-    document.getElementById('page-verif-otp').classList.remove('show');
-    document.getElementById('page-verif-gas').classList.add('show');
+    showToast("Menghubungkan ke API Mail Server...", "info");
+    const { data: apiConf, error: apiErr } = await supabaseClient.from('app_settings').select('*').eq('id', 1).single();
+    if(apiErr || !apiConf) { return showToast("Gagal mengambil Config API dari server", "error"); }
+    emailjs.init(apiConf.emailjs_public_key);
+    generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+    let timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+    const templateParams = { email: email, otp: generatedOTP, time: timeNow };
+    showToast("Mengirim Enkripsi OTP...", "info");
+    emailjs.send(apiConf.emailjs_service_id, apiConf.emailjs_template_id, templateParams)
+    .then((response) => {
+        showToast("OTP berhasil dikirim ke email!", "success");
+        document.getElementById('btn-send-otp').style.display = 'none';
+        document.getElementById('otp-container').style.display = 'block';
+    })
+    .catch((err) => {
+        console.error("EmailJS Error: ", err);
+        showToast("Gagal mengirim email, periksa koneksi", "error");
+    });
 }
 
-function verifyOTP() {}
-            const input = document.getElementById('verif-otp').value.trim();
-            if(input === generatedOTP) {
-                document.getElementById('page-verif-otp').classList.remove('show');
-                document.getElementById('page-verif-gas').classList.add('show');
-            } else {
-                showToast("Kode OTP tidak valid", "error");
-            }
-        }
-
+function verifyOTP() {
+    const input = document.getElementById('verif-otp').value.trim();
+    if(input === generatedOTP) {
+        document.getElementById('page-verif-otp').classList.remove('show');
+        document.getElementById('page-verif-gas').classList.add('show');
+    } else {
+        showToast("Kode OTP tidak valid", "error");
+    }
+}
         async function handleFileUpload(e) {
             const file = e.target.files[0];
             if(!file) return;
